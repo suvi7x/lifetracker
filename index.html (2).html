@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OPERATION: REBUILD — Daily Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1a1814;
+    --surface:#221f19;
+    --card:#2a2620;
+    --card-2:#322d24;
+    --line:#42392c;
+    --amber:#dc9c3d;
+    --amber-dim:#7a5c2e;
+    --olive:#6e7c4c;
+    --olive-dim:#454d31;
+    --rust:#b5532c;
+    --text:#f1ece0;
+    --text-mute:#9c9384;
+    --text-faint:#6b6457;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    background-image:linear-gradient(180deg, rgba(220,156,61,0.05), transparent 200px);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    padding-bottom:48px;
+  }
+  .wrap{max-width:520px;margin:0 auto;padding:18px 16px 0;}
+
+  .header{
+    display:flex;justify-content:space-between;align-items:flex-start;
+    padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:18px;
+  }
+  .header-title{
+    font-family:'Oswald',sans-serif;text-transform:uppercase;
+    letter-spacing:1.5px;font-size:13px;color:var(--text-mute);font-weight:500;
+  }
+  .header-date{
+    font-family:'Oswald',sans-serif;font-size:24px;font-weight:600;
+    letter-spacing:0.5px;margin-top:2px;
+  }
+  .streak-badge{text-align:right;}
+  .streak-num{
+    font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:700;
+    color:var(--amber);line-height:1;
+  }
+  .streak-label{
+    font-family:'Oswald',sans-serif;font-size:10px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--text-faint);margin-top:2px;
+  }
+  .sync-status{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;margin-top:4px;
+    color:var(--text-faint);text-align:right;min-height:12px;cursor:default;
+  }
+  .sync-status.error{color:var(--rust);text-decoration:underline;cursor:pointer;}
+  .sync-status.warn{color:var(--amber);}
+  .sync-status.ok{color:var(--olive);}
+
+  .tabs{display:flex;gap:6px;margin-bottom:18px;}
+  .tab{
+    flex:1;text-align:center;padding:9px 4px;border-radius:3px;
+    font-family:'Oswald',sans-serif;font-size:11px;letter-spacing:1.2px;
+    text-transform:uppercase;font-weight:500;cursor:pointer;
+    background:var(--surface);color:var(--text-faint);border:1px solid var(--line);
+  }
+  .tab.active{background:var(--amber-dim);color:var(--text);border-color:var(--amber);}
+  .panel{display:none;}
+  .panel.active{display:block;animation:fade .2s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:16px;margin-bottom:14px;}
+  .card-label{
+    font-family:'Oswald',sans-serif;font-size:11px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--text-faint);margin-bottom:10px;
+    display:flex;justify-content:space-between;align-items:baseline;
+  }
+  .card-label span.pct{font-family:'IBM Plex Mono',monospace;color:var(--amber);font-size:13px;}
+
+  .gauge{position:relative;height:18px;background:var(--surface);border:1px solid var(--line);border-radius:2px;overflow:hidden;}
+  .gauge-fill{height:100%;background:linear-gradient(90deg,var(--amber-dim),var(--amber));transition:width .35s ease;}
+  .gauge-ticks{position:absolute;top:0;left:0;right:0;bottom:0;background-image:repeating-linear-gradient(90deg, var(--bg) 0 1px, transparent 1px 10%);pointer-events:none;}
+  .gauge-meta{display:flex;justify-content:space-between;margin-top:6px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);}
+
+  .habit-row{display:flex;align-items:center;gap:12px;padding:12px 6px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;}
+  .habit-row:last-child{border-bottom:none;}
+  .habit-row:active{background:var(--card-2);}
+  .check{
+    width:26px;height:26px;flex:0 0 26px;border:2px solid var(--text-faint);border-radius:3px;
+    display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;
+    font-weight:700;color:transparent;transition:all .15s;
+  }
+  .habit-row.done .check{background:var(--olive);border-color:var(--olive);color:#16140f;}
+  .habit-row.done .check::after{content:"✓";}
+  .habit-info{flex:1;min-width:0;}
+  .habit-name{font-size:14.5px;font-weight:500;}
+  .habit-row.done .habit-name{color:var(--text-mute);text-decoration:line-through;text-decoration-color:var(--text-faint);}
+  .habit-note{font-size:11.5px;color:var(--text-faint);margin-top:1px;}
+  .habit-xp{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber-dim);flex:0 0 auto;}
+  .habit-row.done .habit-xp{color:var(--amber);}
+
+  .week-strip{display:flex;justify-content:space-between;margin-top:4px;}
+  .day-col{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;}
+  .day-letter{font-family:'Oswald',sans-serif;font-size:10px;color:var(--text-faint);letter-spacing:1px;}
+  .day-mark{width:30px;height:30px;border-radius:3px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-faint);}
+  .day-mark.future{opacity:.35;}
+  .day-mark.excluded{border-style:dashed;opacity:.4;}
+  .day-mark.lvl1{background:var(--olive-dim);border-color:var(--olive-dim);color:var(--text-mute);}
+  .day-mark.lvl2{background:var(--amber-dim);border-color:var(--amber-dim);color:var(--text);}
+  .day-mark.lvl3{background:var(--amber);border-color:var(--amber);color:#1a1814;font-weight:700;}
+
+  .month-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:6px;}
+  .month-cell{aspect-ratio:1;border-radius:2px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--text-faint);}
+  .month-cell.lvl1{background:var(--olive-dim);border-color:var(--olive-dim);}
+  .month-cell.lvl2{background:var(--amber-dim);border-color:var(--amber-dim);color:var(--text);}
+  .month-cell.lvl3{background:var(--amber);border-color:var(--amber);color:#1a1814;font-weight:700;}
+  .month-cell.future{opacity:.3;}
+
+  .stat-row{display:flex;gap:10px;margin-top:12px;}
+  .stat{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:10px;text-align:center;}
+  .stat-num{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;color:var(--amber);}
+  .stat-cap{font-family:'Oswald',sans-serif;font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint);margin-top:2px;}
+
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;}
+  .toggle-row .lbl{font-size:13px;color:var(--text-mute);}
+  .switch{width:42px;height:24px;border-radius:12px;background:var(--surface);border:1px solid var(--line);position:relative;cursor:pointer;flex:0 0 auto;}
+  .switch.on{background:var(--olive-dim);border-color:var(--olive);}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--text-faint);transition:left .15s;}
+  .switch.on::after{left:21px;background:var(--olive);}
+
+  .seg{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden;margin-bottom:10px;}
+  .seg-btn{flex:1;text-align:center;padding:9px 4px;cursor:pointer;font-family:'Oswald',sans-serif;font-size:11.5px;letter-spacing:1px;text-transform:uppercase;color:var(--text-faint);background:var(--surface);}
+  .seg-btn.save.active{background:var(--olive-dim);color:var(--text);}
+  .seg-btn.spend.active{background:var(--rust);color:var(--text);}
+
+  .edit-habit{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:10px;margin-bottom:8px;}
+  .edit-row{display:flex;gap:8px;margin-bottom:6px;}
+  .edit-row input[type=text]{flex:1;}
+  .edit-row input[type=number]{width:64px;}
+  input[type=text],input[type=number],textarea{
+    background:var(--bg);border:1px solid var(--line);border-radius:3px;color:var(--text);
+    font-family:'Inter',sans-serif;font-size:13px;padding:7px 8px;
+  }
+  textarea{width:100%;min-height:70px;resize:vertical;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  input:focus,textarea:focus{outline:2px solid var(--amber-dim);}
+  .note-input{width:100%;margin-top:0;}
+  .del-btn{background:none;border:1px solid var(--rust);color:var(--rust);border-radius:3px;font-size:11px;padding:0 10px;cursor:pointer;font-family:'Oswald',sans-serif;letter-spacing:1px;}
+  .btn{width:100%;padding:11px;border-radius:3px;border:1px solid var(--amber);background:var(--amber-dim);color:var(--text);font-family:'Oswald',sans-serif;letter-spacing:1.2px;text-transform:uppercase;font-size:12.5px;font-weight:500;cursor:pointer;margin-top:6px;}
+  .btn.ghost{background:transparent;border-color:var(--line);color:var(--text-mute);}
+  .btn.add{background:transparent;border:1px dashed var(--olive);color:var(--olive);margin-top:10px;}
+  .btn.danger{border-color:var(--rust);background:transparent;color:var(--rust);}
+  .hint{font-size:11.5px;color:var(--text-faint);margin-top:8px;line-height:1.5;}
+  .small-input-row{display:flex;align-items:center;gap:10px;margin-top:10px;}
+  .small-input-row label{font-size:12.5px;color:var(--text-mute);flex:1;}
+  .small-input-row input{width:60px;}
+  .empty{text-align:center;color:var(--text-faint);font-size:13px;padding:20px 0;}
+
+  #toast-wrap{position:fixed;top:0;left:0;right:0;display:flex;justify-content:center;z-index:50;pointer-events:none;}
+  .toast{margin-top:14px;background:var(--card-2);border:2px solid var(--amber);border-radius:4px;padding:12px 20px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.4);transform:scale(0.85) rotate(-3deg);opacity:0;transition:transform .25s cubic-bezier(.34,1.56,.64,1), opacity .25s;max-width:90%;}
+  .toast.show{transform:scale(1) rotate(0deg);opacity:1;}
+  .toast-title{font-family:'Oswald',sans-serif;font-size:15px;letter-spacing:1.5px;text-transform:uppercase;color:var(--amber);font-weight:600;}
+  .toast-sub{font-size:12px;color:var(--text-mute);margin-top:2px;}
+</style>
+</head>
+<body>
+<div id="toast-wrap"></div>
+
+<div class="wrap">
+  <div class="header">
+    <div>
+      <div class="header-title">Operation: Rebuild</div>
+      <div class="header-date" id="today-date">—</div>
+    </div>
+    <div class="streak-badge">
+      <div class="streak-num" id="streak-num">000</div>
+      <div class="streak-label">Day Streak</div>
+      <div class="sync-status" id="sync-status"></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="today">Today</div>
+    <div class="tab" data-tab="history">Week / Month</div>
+    <div class="tab" data-tab="money">Money</div>
+    <div class="tab" data-tab="settings">Settings</div>
+  </div>
+
+  <div class="panel active" id="panel-today">
+    <div class="card">
+      <div class="card-label">Today's Orders <span class="pct" id="today-pct-label">0%</span></div>
+      <div class="gauge"><div class="gauge-fill" id="today-gauge" style="width:0%"></div><div class="gauge-ticks"></div></div>
+      <div class="gauge-meta"><span id="today-xp-text">0 / 0 XP</span><span id="today-status">—</span></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Checklist</div>
+      <div id="habit-list"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-history">
+    <div class="card">
+      <div class="card-label">Performance Trend <span class="pct" id="trend-range-label">Last 30 days</span></div>
+      <svg id="trend-svg" viewBox="0 0 300 100" preserveAspectRatio="none" style="width:100%;height:120px;display:block;"></svg>
+      <div class="hint">Dashed line = your streak threshold. One point per day, last 30 days.</div>
+    </div>
+    <div class="card">
+      <div class="card-label">This Week <span class="pct" id="week-pct-label">0%</span></div>
+      <div class="week-strip" id="week-strip"></div>
+      <div class="toggle-row">
+        <div class="lbl">Include weekends in score</div>
+        <div class="switch" id="weekend-switch"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">This Month <span class="pct" id="month-pct-label">0%</span></div>
+      <div class="month-grid" id="month-grid"></div>
+      <div class="stat-row">
+        <div class="stat"><div class="stat-num" id="best-streak-num">0</div><div class="stat-cap">Best Streak</div></div>
+        <div class="stat"><div class="stat-num" id="perfect-days-num">0</div><div class="stat-cap">Perfect Days</div></div>
+        <div class="stat"><div class="stat-num" id="month-days-num">0</div><div class="stat-cap">Days Logged</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-money">
+    <div class="card">
+      <div class="card-label">Balance</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:30px;color:var(--amber);font-weight:700;">₹<span id="balance-num">0</span></div>
+      <div class="stat-row">
+        <div class="stat"><div class="stat-num" id="total-saved-num">₹0</div><div class="stat-cap">Total Saved</div></div>
+        <div class="stat"><div class="stat-num" id="total-spent-num">₹0</div><div class="stat-cap">Total Spent</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Add Entry</div>
+      <div class="seg" id="txn-type-toggle">
+        <div class="seg-btn save active" data-type="save">+ Saved</div>
+        <div class="seg-btn spend" data-type="spend">− Spent</div>
+      </div>
+      <div class="edit-row">
+        <input type="text" id="txn-note" placeholder="What for? (note)" style="flex:1;">
+        <input type="number" id="txn-amount" placeholder="₹" min="0" style="width:90px;">
+      </div>
+      <button class="btn" id="add-txn-btn">Add Entry</button>
+    </div>
+    <div class="card">
+      <div class="card-label">History</div>
+      <div id="txn-list"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-settings">
+    <div class="card">
+      <div class="card-label">Edit Habits &amp; XP Weights</div>
+      <div id="edit-habit-list"></div>
+      <button class="btn add" id="add-habit-btn">+ Add Habit</button>
+      <button class="btn" id="save-habits-btn">Save Changes</button>
+    </div>
+    <div class="card">
+      <div class="card-label">Streak Rule</div>
+      <div class="small-input-row">
+        <label>Count a day toward streak if score is at least:</label>
+        <input type="number" id="streak-threshold" min="0" max="100">
+        <span style="color:var(--text-faint);font-size:13px;">%</span>
+      </div>
+      <div class="hint">Default is 50% — roughly your "Minimum Viable Day". Lower it if you want streaks to survive rougher weeks.</div>
+      <button class="btn ghost" id="save-threshold-btn">Save</button>
+    </div>
+    <div class="card">
+      <div class="card-label">Backup (recommended)</div>
+      <div class="hint" id="storage-mode-note">Checking storage…</div>
+      <button class="btn ghost" id="copy-backup-btn">Copy Backup to Clipboard</button>
+      <div class="hint">Paste it into Notes or a message to yourself. If your data ever disappears, paste it back below to restore it.</div>
+      <textarea id="restore-input" placeholder="Paste a backup here to restore it"></textarea>
+      <button class="btn ghost" id="restore-btn">Restore From Backup</button>
+    </div>
+    <div class="card">
+      <div class="card-label">Reset</div>
+      <div class="hint">This clears every day you've logged on this device. Habit list stays. Cannot be undone.</div>
+      <button class="btn danger" id="reset-btn">Clear All History</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_HABITS = [
+  {id:'no-ig',   name:'No Instagram — first 30 min after waking', xp:10, note:'Wake → intentional start, not phone'},
+  {id:'milk',    name:'Drink 1 litre of milk',                    xp:15, note:'Min on bad days: 500ml'},
+  {id:'meals',   name:'Eat 3 proper meals',                       xp:15, note:'Lunch + snack/extra + dinner'},
+  {id:'train',   name:'Train (minimum 10 pushups)',                xp:15, note:'Gym day auto-counts. No zero days.'},
+  {id:'read',    name:'Read 5 pages',                              xp:10, note:'Min on bad days: 2 pages'},
+  {id:'learn',   name:'15 min business learning',                  xp:10, note:'Sales, marketing, editing courses'},
+  {id:'create',  name:'15 min creation',                           xp:15, note:'Edit a reel, write a script, build portfolio'},
+  {id:'tracklog',name:'Track the day before sleeping',             xp:10, note:'30 seconds, every night'},
+];
+const DEFAULT_SETTINGS = {includeWeekends:false, streakThreshold:50, bestStreak:0};
+const DEFAULT_FINANCES = {transactions:[]};
+const LS_PREFIX = 'rebuild_dashboard_v1_';
+const hasCloud = !!(window.storage && typeof window.storage.set === 'function' && typeof window.storage.get === 'function');
+
+let habits = [];
+let settings = {...DEFAULT_SETTINGS};
+let logs = {};
+let finances = {...DEFAULT_FINANCES};
+let txnType = 'save';
+
+function pad(n){return n<10?'0'+n:''+n;}
+function dateKey(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function isWeekend(d){const w=d.getDay();return w===0||w===6;}
+function startOfWeek(d){const r=new Date(d);const w=r.getDay();const diff=(w===0?-6:1-w);return addDays(r,diff);}
+// "Today" doesn't roll over to the next day until 4am — late nights still count as the day before.
+function nowDate(){
+  const d = new Date();
+  if(d.getHours() < 4) d.setDate(d.getDate()-1);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+/* ---------- Storage: local-first, cloud as bonus sync ---------- */
+function lsGet(key){ try{ return localStorage.getItem(LS_PREFIX+key); }catch(e){ return null; } }
+function lsSet(key,val){ try{ localStorage.setItem(LS_PREFIX+key,val); return true; }catch(e){ return false; } }
+
+let statusState='idle';
+function setStatus(state,msg){
+  statusState=state;
+  const el=document.getElementById('sync-status');
+  if(!el) return;
+  el.className='sync-status'+(state==='error'?' error':state==='warn'?' warn':state==='ok'?' ok':'');
+  if(state==='saving') el.textContent='saving…';
+  else if(state==='ok'){ el.textContent='saved'; setTimeout(()=>{ if(statusState==='ok') el.textContent=''; },1800); }
+  else if(state==='warn') el.textContent = msg || 'saved on this device only';
+  else if(state==='error') el.textContent = msg || '⚠ not saved — tap to retry';
+  else el.textContent='';
+}
+
+async function safeGet(key, attempts=3){
+  if(hasCloud){
+    for(let i=0;i<attempts;i++){
+      try{
+        const r = await window.storage.get(key);
+        const val = r ? r.value : null;
+        if(val!==null) lsSet(key,val);
+        return val;
+      }catch(e){
+        if(i<attempts-1) await new Promise(res=>setTimeout(res,300*(i+1)));
+      }
+    }
+    return lsGet(key); // cloud unreachable — fall back to this device's last known copy
+  }
+  return lsGet(key);
+}
+
+async function safeSet(key,val,attempts=3){
+  const payload = typeof val==='string'?val:JSON.stringify(val);
+  const localOk = lsSet(key,payload);
+  if(!hasCloud){
+    setStatus(localOk?'ok':'error', localOk?undefined:'⚠ this browser blocked storage — use Backup');
+    return localOk;
+  }
+  setStatus('saving');
+  for(let i=0;i<attempts;i++){
+    try{
+      await window.storage.set(key,payload);
+      setStatus('ok');
+      return true;
+    }catch(e){
+      if(i<attempts-1) await new Promise(res=>setTimeout(res,350*(i+1)));
+    }
+  }
+  if(localOk){ setStatus('warn','saved on this device — cloud sync failed'); return true; }
+  setStatus('error','⚠ not saved — copy a backup now'); return false;
+}
+
+async function retrySyncNow(){
+  if(statusState!=='error' && statusState!=='warn') return;
+  await safeSet('habits',habits);
+  await safeSet('settings',settings);
+  await safeSet('logs',logs);
+}
+
+async function loadAll(){
+  const h = await safeGet('habits');
+  const s = await safeGet('settings');
+  const l = await safeGet('logs');
+  const f = await safeGet('finances');
+  habits = h ? JSON.parse(h) : JSON.parse(JSON.stringify(DEFAULT_HABITS));
+  settings = s ? {...DEFAULT_SETTINGS, ...JSON.parse(s)} : {...DEFAULT_SETTINGS};
+  logs = l ? JSON.parse(l) : {};
+  finances = f ? JSON.parse(f) : JSON.parse(JSON.stringify(DEFAULT_FINANCES));
+  if(!h) await safeSet('habits',habits);
+  if(!s) await safeSet('settings',settings);
+  if(!f) await safeSet('finances',finances);
+  const note = document.getElementById('storage-mode-note');
+  if(note) note.textContent = hasCloud
+    ? 'Saving to your account, with a local backup on this device too.'
+    : 'Saving to this browser only (cloud sync isn\'t available here). Back up often using the button below.';
+}
+
+/* ---------- Scoring ---------- */
+function totalPossible(){ return habits.reduce((a,h)=>a+Number(h.xp||0),0); }
+function dayScore(key){
+  const possible = totalPossible();
+  if(possible===0) return {earned:0,possible:0,pct:0};
+  const entry = logs[key] || {};
+  let earned = 0;
+  habits.forEach(h=>{ if(entry[h.id]) earned += Number(h.xp||0); });
+  return {earned, possible, pct: Math.round((earned/possible)*100)};
+}
+function computeStreak(){
+  const today = nowDate();
+  let cursor = new Date(today);
+  let streak = 0;
+  const todayScore = dayScore(dateKey(today)).pct;
+  if(todayScore >= settings.streakThreshold){ streak++; cursor = addDays(cursor,-1); }
+  else cursor = addDays(cursor,-1);
+  while(true){
+    const sc = dayScore(dateKey(cursor)).pct;
+    if(sc >= settings.streakThreshold && logs[dateKey(cursor)]){ streak++; cursor = addDays(cursor,-1); }
+    else break;
+  }
+  return streak;
+}
+function weeklyScore(){
+  const today = nowDate();
+  const monday = startOfWeek(today);
+  let days = [];
+  for(let i=0;i<7;i++) days.push(addDays(monday,i));
+  days = days.filter(d => d <= today);
+  if(!settings.includeWeekends) days = days.filter(d => !isWeekend(d));
+  if(days.length===0) return {pct:0,days:[]};
+  const total = days.reduce((a,d)=>a+dayScore(dateKey(d)).pct,0);
+  return {pct: Math.round(total/days.length), days};
+}
+function monthlyScore(){
+  const today = nowDate();
+  const first = new Date(today.getFullYear(), today.getMonth(), 1);
+  let days = [];
+  let d = new Date(first);
+  while(d <= today){ days.push(new Date(d)); d = addDays(d,1); }
+  if(days.length===0) return {pct:0,days:[]};
+  const total = days.reduce((a,d)=>a+dayScore(dateKey(d)).pct,0);
+  return {pct: Math.round(total/days.length), days};
+}
+function lvlClass(pct){ if(pct>=80) return 'lvl3'; if(pct>=40) return 'lvl2'; if(pct>0) return 'lvl1'; return ''; }
+
+/* ---------- Performance Trend (line graph) ---------- */
+function renderTrend(){
+  const svg = document.getElementById('trend-svg');
+  if(!svg) return;
+  const today = nowDate();
+  const days = [];
+  for(let i=29;i>=0;i--) days.push(addDays(today,-i));
+  const w=300,h=100,padX=4,padY=8;
+  const stepX = days.length>1 ? (w-2*padX)/(days.length-1) : 0;
+  const pts = days.map((d,i)=>{
+    const pct = dayScore(dateKey(d)).pct;
+    return { x: padX+i*stepX, y: h-padY-(pct/100)*(h-2*padY), pct };
+  });
+  const lineStr = pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const threshY = h-padY-(settings.streakThreshold/100)*(h-2*padY);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.innerHTML = `
+    <line x1="${padX}" y1="${threshY.toFixed(1)}" x2="${w-padX}" y2="${threshY.toFixed(1)}" stroke="#6e7c4c" stroke-width="1" stroke-dasharray="3,3"/>
+    <polyline points="${lineStr}" fill="none" stroke="#dc9c3d" stroke-width="2"/>
+    ${pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${p.pct===100?2.4:1.4}" fill="${p.pct>0?'#dc9c3d':'#2a2620'}" stroke="#dc9c3d" stroke-width="0.8"/>`).join('')}
+  `;
+  const rangeEl = document.getElementById('trend-range-label');
+  if(rangeEl){
+    const startLbl = days[0].toLocaleDateString('en-US',{day:'numeric',month:'short'});
+    const endLbl = days[days.length-1].toLocaleDateString('en-US',{day:'numeric',month:'short'});
+    rangeEl.textContent = startLbl+' – '+endLbl;
+  }
+}
+
+/* ---------- Finances ---------- */
+function updateTxnToggleUI(){
+  document.querySelectorAll('#txn-type-toggle .seg-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.type===txnType);
+  });
+}
+function formatDisplayDate(key){
+  const [y,m,dd] = key.split('-').map(Number);
+  return new Date(y,m-1,dd).toLocaleDateString('en-US',{day:'numeric',month:'short'});
+}
+function financeTotals(){
+  let saved=0, spent=0;
+  (finances.transactions||[]).forEach(t=>{ if(t.type==='save') saved+=Number(t.amount); else spent+=Number(t.amount); });
+  return {saved, spent, balance: saved-spent};
+}
+function renderMoney(){
+  const balEl = document.getElementById('balance-num');
+  if(!balEl) return;
+  const tot = financeTotals();
+  balEl.textContent = tot.balance.toLocaleString('en-IN');
+  document.getElementById('total-saved-num').textContent = '₹'+tot.saved.toLocaleString('en-IN');
+  document.getElementById('total-spent-num').textContent = '₹'+tot.spent.toLocaleString('en-IN');
+  const list = document.getElementById('txn-list');
+  list.innerHTML='';
+  const txns = finances.transactions||[];
+  if(txns.length===0){ list.innerHTML='<div class="empty">No entries yet.</div>'; return; }
+  const sorted = [...txns].sort((a,b)=> b.date.localeCompare(a.date) || (''+b.id).localeCompare(''+a.id));
+  sorted.forEach(t=>{
+    const row=document.createElement('div');
+    row.className='habit-row';
+    row.style.cursor='default';
+    const sign = t.type==='save' ? '+' : '−';
+    const color = t.type==='save' ? '#6e7c4c' : '#b5532c';
+    row.innerHTML = `
+      <div class="habit-info">
+        <div class="habit-name">${escapeHtml(t.note || (t.type==='save'?'Saved':'Spent'))}</div>
+        <div class="habit-note">${formatDisplayDate(t.date)}</div>
+      </div>
+      <div class="habit-xp" style="color:${color};font-size:13px;">${sign}₹${Number(t.amount).toLocaleString('en-IN')}</div>
+      <button class="del-btn" data-txid="${t.id}" style="margin-left:8px;">✕</button>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('[data-txid]').forEach(btn=>{
+    btn.addEventListener('click', async (e)=>{
+      finances.transactions = (finances.transactions||[]).filter(t=>t.id!==e.target.dataset.txid);
+      await safeSet('finances', finances);
+      renderMoney();
+    });
+  });
+}
+async function addTransaction(){
+  const amtInput = document.getElementById('txn-amount');
+  const noteInput = document.getElementById('txn-note');
+  const amt = Number(amtInput.value);
+  const note = noteInput.value.trim();
+  if(!amt || amt<=0) return;
+  if(!finances.transactions) finances.transactions=[];
+  finances.transactions.push({id:'t'+Date.now(), type:txnType, amount:amt, note, date: dateKey(nowDate())});
+  await safeSet('finances', finances);
+  amtInput.value=''; noteInput.value='';
+  renderMoney();
+  showToast(txnType==='save'?'SAVED':'LOGGED', txnType==='save' ? `+₹${amt} added to savings.` : `−₹${amt} logged.`);
+}
+
+/* ---------- Rendering ---------- */
+function renderHeader(){
+  const today = nowDate();
+  document.getElementById('today-date').textContent = today.toLocaleDateString('en-US',{weekday:'short', day:'numeric', month:'short'});
+  document.getElementById('streak-num').textContent = String(computeStreak()).padStart(3,'0');
+}
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
+
+function renderToday(){
+  const key = dateKey(nowDate());
+  const entry = logs[key] || {};
+  const list = document.getElementById('habit-list');
+  list.innerHTML = '';
+  if(habits.length===0){ list.innerHTML = '<div class="empty">No habits yet. Add some in Settings.</div>'; }
+  habits.forEach(h=>{
+    const done = !!entry[h.id];
+    const row = document.createElement('div');
+    row.className = 'habit-row' + (done?' done':'');
+    row.innerHTML = `
+      <div class="check"></div>
+      <div class="habit-info">
+        <div class="habit-name">${escapeHtml(h.name)}</div>
+        ${h.note?`<div class="habit-note">${escapeHtml(h.note)}</div>`:''}
+      </div>
+      <div class="habit-xp">+${h.xp}xp</div>
+    `;
+    row.addEventListener('click', ()=>toggleHabit(h.id));
+    list.appendChild(row);
+  });
+  const sc = dayScore(key);
+  document.getElementById('today-gauge').style.width = sc.pct+'%';
+  document.getElementById('today-pct-label').textContent = sc.pct+'%';
+  document.getElementById('today-xp-text').textContent = sc.earned+' / '+sc.possible+' XP';
+  document.getElementById('today-status').textContent = sc.pct===100 ? 'PERFECT' : (sc.pct>=settings.streakThreshold ? 'ON TRACK' : 'KEEP GOING');
+}
+
+function renderHistory(){
+  renderTrend();
+  const wk = weeklyScore();
+  document.getElementById('week-pct-label').textContent = wk.pct+'%';
+  document.getElementById('weekend-switch').className = 'switch'+(settings.includeWeekends?' on':'');
+
+  const today = nowDate();
+  const monday = startOfWeek(today);
+  const strip = document.getElementById('week-strip');
+  strip.innerHTML = '';
+  const letters = ['M','T','W','T','F','S','S'];
+  for(let i=0;i<7;i++){
+    const d = addDays(monday,i);
+    const key = dateKey(d);
+    const weekend = isWeekend(d);
+    const future = d > today;
+    const excluded = weekend && !settings.includeWeekends;
+    const sc = dayScore(key);
+    let cls = 'day-mark';
+    if(future) cls += ' future';
+    else if(excluded) cls += ' excluded';
+    else cls += ' '+lvlClass(sc.pct);
+    const col = document.createElement('div');
+    col.className = 'day-col';
+    col.innerHTML = `<div class="day-letter">${letters[i]}</div><div class="${cls}">${future?'':sc.pct>0?sc.pct:'·'}</div>`;
+    strip.appendChild(col);
+  }
+
+  const mo = monthlyScore();
+  document.getElementById('month-pct-label').textContent = mo.pct+'%';
+  const grid = document.getElementById('month-grid');
+  grid.innerHTML = '';
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+  let perfectDays = 0, loggedDays = 0;
+  for(let i=1;i<=daysInMonth;i++){
+    const d = new Date(today.getFullYear(), today.getMonth(), i);
+    const key = dateKey(d);
+    const future = d > today;
+    const cell = document.createElement('div');
+    if(future){ cell.className='month-cell future'; cell.textContent=i; }
+    else{
+      const sc = dayScore(key);
+      if(logs[key]) loggedDays++;
+      if(sc.pct===100) perfectDays++;
+      cell.className = 'month-cell '+lvlClass(sc.pct);
+      cell.textContent = i;
+    }
+    grid.appendChild(cell);
+  }
+  document.getElementById('best-streak-num').textContent = Math.max(settings.bestStreak||0, computeStreak());
+  document.getElementById('perfect-days-num').textContent = perfectDays;
+  document.getElementById('month-days-num').textContent = loggedDays;
+}
+
+function renderSettings(){
+  const list = document.getElementById('edit-habit-list');
+  list.innerHTML = '';
+  habits.forEach((h,idx)=>{
+    const row = document.createElement('div');
+    row.className = 'edit-habit';
+    row.innerHTML = `
+      <div class="edit-row">
+        <input type="text" value="${escapeAttr(h.name)}" data-field="name" data-idx="${idx}">
+        <input type="number" value="${h.xp}" min="0" data-field="xp" data-idx="${idx}">
+        <button class="del-btn" data-del="${idx}">DROP</button>
+      </div>
+      <input type="text" class="note-input" value="${escapeAttr(h.note||'')}" placeholder="Bad-day minimum / note" data-field="note" data-idx="${idx}">
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const idx = +e.target.dataset.idx;
+      const field = e.target.dataset.field;
+      habits[idx][field] = field==='xp' ? Number(e.target.value||0) : e.target.value;
+    });
+  });
+  list.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.addEventListener('click', e=>{ habits.splice(+e.target.dataset.del,1); renderSettings(); });
+  });
+  document.getElementById('streak-threshold').value = settings.streakThreshold;
+}
+
+function snapshot(){
+  return { today: dayScore(dateKey(nowDate())).pct, week: weeklyScore().pct, month: monthlyScore().pct, streak: computeStreak() };
+}
+function checkCelebrations(before, after){
+  if(before.today<100 && after.today===100){ showToast('PERFECT DAY','Every habit, full XP. Mission complete.'); return; }
+  if(before.week<80 && after.week>=80){ showToast('GREAT WEEK',`Weekly score hit ${after.week}%.`); return; }
+  if(before.month<80 && after.month>=80){ showToast('AMAZING MONTH',`Monthly score hit ${after.month}%.`); return; }
+  const milestones = [7,14,30,60,90,180,365];
+  if(after.streak>before.streak && milestones.includes(after.streak)){ showToast(after.streak+' DAY STREAK','No zero days. Keep the chain going.'); }
+}
+let toastTimer=null;
+function showToast(title, sub){
+  const wrap = document.getElementById('toast-wrap');
+  wrap.innerHTML = `<div class="toast" id="active-toast"><div class="toast-title">${title}</div><div class="toast-sub">${sub}</div></div>`;
+  const el = document.getElementById('active-toast');
+  requestAnimationFrame(()=> el.classList.add('show'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>wrap.innerHTML='',250); }, 3200);
+}
+
+async function toggleHabit(habitId){
+  const before = snapshot();
+  const key = dateKey(nowDate());
+  if(!logs[key]) logs[key] = {};
+  logs[key][habitId] = !logs[key][habitId];
+  await safeSet('logs', logs);
+  renderToday(); renderHeader(); renderHistory();
+  const after = snapshot();
+  if(after.streak > (settings.bestStreak||0)){ settings.bestStreak = after.streak; await safeSet('settings', settings); }
+  checkCelebrations(before, after);
+}
+
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  if(name==='history') renderHistory();
+  if(name==='settings') renderSettings();
+  if(name==='money') renderMoney();
+}
+
+async function init(){
+  await loadAll();
+  renderHeader();
+  renderToday();
+  renderHistory();
+  renderSettings();
+  renderMoney();
+
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>switchTab(t.dataset.tab)));
+  document.getElementById('sync-status').addEventListener('click', retrySyncNow);
+
+  document.querySelectorAll('#txn-type-toggle .seg-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{ txnType=b.dataset.type; updateTxnToggleUI(); });
+  });
+  document.getElementById('add-txn-btn').addEventListener('click', addTransaction);
+
+  document.getElementById('weekend-switch').addEventListener('click', async ()=>{
+    settings.includeWeekends = !settings.includeWeekends;
+    await safeSet('settings', settings);
+    renderHistory();
+  });
+
+  document.getElementById('add-habit-btn').addEventListener('click', ()=>{
+    habits.push({id:'h'+Date.now(), name:'New habit', xp:10, note:''});
+    renderSettings();
+  });
+
+  document.getElementById('save-habits-btn').addEventListener('click', async ()=>{
+    habits = habits.filter(h=>h.name && h.name.trim().length>0);
+    await safeSet('habits', habits);
+    renderToday(); renderHistory();
+    showToast('SAVED','Habit list updated.');
+  });
+
+  document.getElementById('save-threshold-btn').addEventListener('click', async ()=>{
+    const v = Number(document.getElementById('streak-threshold').value);
+    settings.streakThreshold = Math.max(0, Math.min(100, v||0));
+    await safeSet('settings', settings);
+    renderHeader(); renderToday();
+    showToast('SAVED','Streak rule updated.');
+  });
+
+  document.getElementById('copy-backup-btn').addEventListener('click', async ()=>{
+    const dump = JSON.stringify({habits, settings, logs, finances});
+    try{
+      await navigator.clipboard.writeText(dump);
+      showToast('BACKUP COPIED','Paste it into Notes or a message to yourself.');
+    }catch(e){
+      document.getElementById('restore-input').value = dump;
+      showToast('BACKUP READY','Clipboard blocked — copy the text from the box below manually.');
+    }
+  });
+
+  document.getElementById('restore-btn').addEventListener('click', async ()=>{
+    const raw = document.getElementById('restore-input').value.trim();
+    if(!raw) return;
+    try{
+      const parsed = JSON.parse(raw);
+      if(!parsed.habits || !parsed.logs) throw new Error('bad shape');
+      habits = parsed.habits; settings = {...DEFAULT_SETTINGS, ...parsed.settings}; logs = parsed.logs;
+      finances = parsed.finances ? parsed.finances : {transactions:[]};
+      await safeSet('habits', habits); await safeSet('settings', settings); await safeSet('logs', logs); await safeSet('finances', finances);
+      renderHeader(); renderToday(); renderHistory(); renderSettings(); renderMoney();
+      document.getElementById('restore-input').value='';
+      showToast('RESTORED','Your backup is back in place.');
+    }catch(e){
+      showToast('RESTORE FAILED','That text doesn\'t look like a valid backup.');
+    }
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', async ()=>{
+    if(confirm('Clear all logged history? This cannot be undone.')){
+      logs = {}; settings.bestStreak = 0;
+      await safeSet('logs', logs); await safeSet('settings', settings);
+      renderHeader(); renderToday(); renderHistory();
+      showToast('CLEARED','History reset. Fresh start.');
+    }
+  });
+}
+
+init();
+</script>
+</body>
+</html>
